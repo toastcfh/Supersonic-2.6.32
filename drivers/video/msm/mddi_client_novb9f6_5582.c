@@ -195,6 +195,46 @@ err_request_gpio_failed:
 	return ret;
 }
 
+/* maejrep's T2 interface - start */
+/* Allows for changing of the T2 register on the fly */
+static ssize_t nov_t2_show(struct device *dev, struct device_attribute *attr,
+                       char *buf)
+{
+	struct msm_mddi_client_data *client_data = dev->platform_data;
+	int ret;
+	unsigned val;
+
+	val = 0;
+	val |= client_data->remote_read(client_data, 0xb101) << 8;
+	val |= client_data->remote_read(client_data, 0xb102);
+
+	ret = sprintf(buf, "T2: d%u, 0x%04xh\n", val, val);
+
+	return ret;
+}
+
+static ssize_t nov_t2_store(struct device *dev, struct device_attribute *attr,
+                       const char *buf, size_t count)
+{
+	struct msm_mddi_client_data *client_data = dev->platform_data;
+	unsigned val;
+
+	sscanf(buf, "%u", &val);
+
+	if (val <= 245 || val > 999) {
+		printk(KERN_WARNING "%s: invalid value for t2: %u\n", __func__, val);
+		return -EINVAL;
+	}
+
+	client_data->remote_write(client_data, (0xff00 & val) >> 8, 0xb101);
+	client_data->remote_write(client_data, (0x00ff & val), 0xb102);
+
+	return count;
+}
+
+DEVICE_ATTR(t2, 0644, nov_t2_show, nov_t2_store);
+/* maejrep's T2 interface - end */
+
 static int mddi_novtec_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -242,6 +282,13 @@ static int mddi_novtec_probe(struct platform_device *pdev)
 	platform_device_register(&panel->pdev);
 	wake_lock_init(&panel->idle_lock, WAKE_LOCK_IDLE, "nov_idle_lock");
 
+	/* maejrep's T2 interface printk - start */
+	/* Setup sysfs attr file to read/set t2 value */
+	if (device_create_file(&pdev->dev, &dev_attr_t2)) {
+		printk(KERN_WARNING "%s: device_create_file failed\n", __func__);
+	}
+	/* maejrep's T2 interface - end */
+	
 	return 0;
 }
 
