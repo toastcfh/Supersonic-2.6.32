@@ -99,10 +99,11 @@ struct clkctl_acpu_speed acpu_freq_tbl[] = {
 	{ 921600, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x18, 0, 1275, 128000 }, // 1300
 	{ 960000, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x19, 0, 1275, 128000 }, // 1300 
 	{ 998400, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1A, 0, 1275, 128000 }, // 1300
+	{ 1036800, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1B, 0, 1300, 128000 },
+	{ 1075200, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1C, 0, 1300, 128000 },
 	{ 1113600, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1D, 0, 1300, 128000 },
 	/* Note: Max safe frequency for most Nexus Ones is ~1.1136-1.1152 */
 	{ 1152000, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1E, 0, 1325, 128000 }, // 1300
-	{ 1190400, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x1F, 0, 1325, 128000 },
 	{ 1228800, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x20, 0, 1350, 128000 },
 	{ 1267200, CCTL(CLK_TCXO, 1),		SRC_SCPLL, 0x21, 0, 1350, 128000 },
 	{ 0 },
@@ -144,7 +145,7 @@ static void __init acpuclk_init_cpufreq_table(void)
 		}
 
 		/* Take the fastest speed available at the specified VDD level */
-//		if (vdd != acpu_freq_tbl[i + 1].vdd)
+		if (vdd != acpu_freq_tbl[i + 1].vdd)
 			freq_table[i].frequency = acpu_freq_tbl[i].acpu_khz;
 	}
 
@@ -248,7 +249,7 @@ static void scpll_set_freq(uint32_t lval)
 			;
 
 		/* completion bit is not reliable for SHOT switch */
-		udelay(25); // 25
+		udelay(25);
 	}
 
 	/* write the new L val and switch mode */
@@ -488,7 +489,7 @@ void __init acpu_freq_tbl_fixup(void)
 	}
 	
 	/* Override the fixup because we're overclocking */
-	max_acpu_khz = 1228800;
+	max_acpu_khz = 1267200;
 	
 	/* pr_info("Max ACPU freq is %d KHz\n", max_acpu_khz); */
 
