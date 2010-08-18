@@ -33,6 +33,12 @@
 #define TEMPRS 16                /* total number of temperature regions */
 #define GET_TEMPR() (avs_get_tscsr() >> 28) /* scale TSCSR[CTEMP] to regions */
 
+// #define VOLTAGE_MIN  925 /* mV */
+#define VOLTAGE_MAX  1350
+int VOLTAGE_MIN = 925;
+
+#define VOLTAGE_STEP 25
+
 struct mutex avs_lock;
 
 static struct avs_state_s
@@ -78,10 +84,10 @@ struct clkctl_acpu_speed acpu_max_vdd_tbl[] = {
 	{ 960000, 1275 },
 	{ 998400, 1275 },
 	{ 1036800, 1300 },
-	{ 1075200, 1300 },
-	{ 1113600, 1300 },
+	{ 1075200, 1325 },
+	{ 1113600, 1325 },
 	{ 1152000, 1325 },
-//	{ 1190400, 1325 },
+	{ 1190400, 1325 },
 	{ 1228800, 1350 },
 	{ 1267200, 1350 },
 	{ 0 },
@@ -113,7 +119,15 @@ static void avs_update_voltage_table(short *vdd_table, int max_voltage_freq)
 	cpu = ((avscsr >> 23) & 2) + ((avscsr >> 16) & 1);
 	vu  = ((avscsr >> 28) & 2) + ((avscsr >> 21) & 1);
 	l2  = ((avscsr >> 29) & 2) + ((avscsr >> 22) & 1);
-
+	
+	/* netarchy's stability segment for overclockers */
+	if (cur_freq_idx > 998400) {  // If we're at an overclock speed, raise min voltage
+		VOLTAGE_MIN = 1300; // You're overclocking, you don't get to care about power.
+	} else {
+		VOLTAGE_MIN = 925;
+	}
+	/* end netarchy's stability segment */
+	
 	if ((cpu == 3) || (vu == 3) || (l2 == 3)) {
 		printk(KERN_ERR "AVS: Dly Synth O/P error\n");
 	} else if ((cpu == 2) || (l2 == 2) || (vu == 2)) {
@@ -249,7 +263,7 @@ static struct workqueue_struct  *kavs_wq;
 static void do_avs_timer(struct work_struct *work)
 {
 	int cur_freq_idx;
-	int delay = msecs_to_jiffies(50);
+	int delay = msecs_to_jiffies(50); //50
 
 	mutex_lock(&avs_lock);
 	if (!avs_state.changing) {
