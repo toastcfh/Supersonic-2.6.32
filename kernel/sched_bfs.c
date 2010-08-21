@@ -783,10 +783,9 @@ static inline void clear_cpuidle_map(unsigned long cpu)
 {
 }
 
-/* Always called from a busy cpu on UP */
 static inline int suitable_idle_cpus(struct task_struct *p)
 {
-	return 0;
+	return uprq->curr == uprq->idle;
 }
 
 static inline void resched_suitable_idle(struct task_struct *p)
@@ -1254,10 +1253,10 @@ static void try_preempt(struct task_struct *p, struct rq *this_rq)
 #else /* CONFIG_SMP */
 static void try_preempt(struct task_struct *p, struct rq *this_rq)
 {
-	if (p->prio < this_rq->rq_prio ||
-	    (p->prio == this_rq->rq_prio && p->policy == SCHED_NORMAL &&
-	     time_before(p->deadline, this_rq->rq_deadline)))
-		resched_task(this_rq->curr);
+	if (p->prio < uprq->rq_prio ||
+	    (p->prio == uprq->rq_prio && p->policy == SCHED_NORMAL &&
+	     time_before(p->deadline, uprq->rq_deadline)))
+		resched_task(uprq->curr);
 	return;
 }
 #endif /* CONFIG_SMP */
@@ -1304,6 +1303,8 @@ static int try_to_wake_up(struct task_struct *p, unsigned int state,
 	unsigned long flags;
 	struct rq *rq;
 
+	get_cpu();
+
 	/* This barrier is undocumented, probably for p->state? くそ */
 	smp_wmb();
 
@@ -1338,6 +1339,8 @@ out_running:
 	p->state = TASK_RUNNING;
 out_unlock:
 	task_grq_unlock(&flags);
+	put_cpu();
+
 	return success;
 }
 
@@ -3843,8 +3846,8 @@ SYSCALL_DEFINE3(sched_getaffinity, pid_t, pid, unsigned int, len,
  * sys_sched_yield - yield the current processor to other threads.
  *
  * This function yields the current CPU to other tasks. It does this by
- * zeroing the rq timeslice, which will reset the deadline, and then
- * scheduling away.
+ * scheduling away the current task. If it still has the earliest deadline
+ * it will be scheduled again as the next task.
  */
 SYSCALL_DEFINE0(sched_yield)
 {
@@ -3854,7 +3857,6 @@ SYSCALL_DEFINE0(sched_yield)
 	p = current;
 	rq = task_grq_lock_irq(p);
 	schedstat_inc(rq, yld_count);
-	rq->rq_time_slice = 0;
 	requeue_task(p);
 
 	/*
@@ -4360,8 +4362,11 @@ int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask)
 		/* Task is running on the wrong cpu now, reschedule it. */
 		set_tsk_need_resched(p);
 		running_wrong = 1;
-	} else
-		set_task_cpu(p, cpumask_any_and(cpu_online_mask, new_mask));
+	} else {
+		get_cpu();
+		set_task_cpu(p, cpumask_any_and(cpu_active_mask, new_mask));
+		put_cpu();
+	}
 
 out:
 	if (queued)
@@ -6258,7 +6263,7 @@ static int cache_cpu_idle(unsigned long cpu)
 void __init sched_init_smp(void)
 {
 	struct sched_domain *sd;
-	int cpu;
+	int cpu, i, cpu_scale;
 
 	cpumask_var_t non_isolated_cpus;
 
@@ -6297,7 +6302,13 @@ void __init sched_init_smp(void)
 	 * allowing us to increase the base rr_interval, but in a non linear
 	 * fashion.
 	 */
-	rr_interval *= 1 + ilog2(num_online_cpus());
+	cpu_scale = ilog2(num_online_cpus());
+	rr_interval *= 100;
+	for (i = 0; i < cpu_scale; i++) {
+		rr_interval *= 3;
+		rr_interval /= 2;
+	}
+	rr_interval /= 100;
 
 	grq_lock_irq();
 	/*
